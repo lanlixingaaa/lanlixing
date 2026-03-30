@@ -55,3 +55,5 @@ advanced:
   backoff_factor: 2.0  # Exponential backoff factor
   retry_error_types: ["ConnectionError", "TimeoutError", "URLError", "HTTPError"]  # Network error types to retry
   session_timeout: 1800  # Seconds before session expires
+  browser: "chromium"  # Browser to use: "chromium", "edge", "firefox"
+  browser_version: "stable"  # Browser version: "stable", "beta", "dev", or specific version number

@@ -46,10 +46,21 @@
    ```
 
 3. **安装 Playwright 浏览器**
-   执行以下命令安装所需的Chromium浏览器：
-   ```bash
-   playwright install chromium
-   ```
+   根据您要使用的浏览器执行相应命令：
+   
+   - **Chromium** (默认):
+     ```bash
+     playwright install chromium
+     ```
+   - **Microsoft Edge**:
+     ```bash
+     playwright install chromium
+     ```
+   - **Mozilla Firefox**:
+     ```bash
+     playwright install firefox
+     ```
+   
    更多浏览器支持和安装选项，请参考 [Playwright官方文档](https://playwright.dev/docs/intro#installation)。
 
 4. **配置程序**

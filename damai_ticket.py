@@ -258,9 +258,13 @@ class DamaiTicketSystem:
         return self.retry_manager.retry(func, *args, **kwargs)
     
     def initialize_browser(self):
-        """Initialize Playwright browser"""
+        """Initialize Playwright browser with support for multiple browsers"""
         try:
             playwright = sync_playwright().start()
+            
+            # Get browser configuration from config
+            browser_type = self.config['advanced']['browser']
+            browser_version = self.config['advanced']['browser_version']
             
             # Browser configuration for anti-detection
             browser_config = {
@@ -274,7 +278,30 @@ class DamaiTicketSystem:
                 "ignore_default_args": ["--enable-automation"]
             }
             
-            self.browser = playwright.chromium.launch(**browser_config)
+            # Browser-specific configuration
+            if browser_version != "stable":
+                browser_config["channel"] = browser_version
+            
+            # Launch the appropriate browser
+            if browser_type == "edge":
+                logger.info(f"Initializing Microsoft Edge browser, version: {browser_version}")
+                self.browser = playwright.chromium.launch(
+                    channel="msedge" if browser_version == "stable" else f"msedge-{browser_version}",
+                    **browser_config
+                )
+            elif browser_type == "firefox":
+                logger.info(f"Initializing Mozilla Firefox browser, version: {browser_version}")
+                self.browser = playwright.firefox.launch(
+                    channel=browser_version if browser_version != "stable" else None,
+                    **browser_config
+                )
+            else:  # Default to chromium
+                logger.info(f"Initializing Chromium browser, version: {browser_version}")
+                self.browser = playwright.chromium.launch(
+                    channel=browser_version if browser_version != "stable" else None,
+                    **browser_config
+                )
+            
             context = self.browser.new_context(
                 user_agent=self._get_user_agent(),
                 viewport={"width": 1920, "height": 1080}
@@ -282,14 +309,61 @@ class DamaiTicketSystem:
             
             # Add stealth script to avoid detection
             context.add_init_script("""
+                // Standard anti-detection measures
                 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
                 Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en']});
                 Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3]});
                 Object.defineProperty(navigator, 'mimeTypes', {get: () => [1, 2, 3]});
+                
+                // Edge-specific fixes and compatibility
+                if (navigator.userAgent.includes('Edg/')) {
+                    // Ensure proper Edge browser detection
+                    Object.defineProperty(navigator, 'userAgentData', {
+                        get: () => ({
+                            brands: [{brand: 'Microsoft Edge', version: '123'}],
+                            mobile: false,
+                            platform: 'Windows'
+                        })
+                    });
+                }
             """)
             
             self.page = context.new_page()
-            logger.info("Browser initialized successfully")
+            
+            # Apply browser-specific fixes after page load
+            def apply_browser_fixes():
+                self.page.evaluate("""
+                    // Polyfill for features that might be missing in Edge
+                    if (!Array.prototype.at) {
+                        Array.prototype.at = function(index) {
+                            index = Math.trunc(index) || 0;
+                            if (index < 0) index += this.length;
+                            if (index < 0 || index >= this.length) return undefined;
+                            return this[index];
+                        };
+                    }
+                    
+                    // Fix for Edge CSS rendering differences
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        /* Ensure consistent box-sizing across browsers */
+                        * {
+                            box-sizing: border-box !important;
+                        }
+                        /* Fix for Edge button styling issues */
+                        button {
+                            -webkit-appearance: none;
+                            -moz-appearance: none;
+                            appearance: none;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                """)
+            
+            # Apply fixes immediately
+            apply_browser_fixes()
+            
+            logger.info(f"{browser_type.capitalize()} browser initialized successfully")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize browser: {e}")
