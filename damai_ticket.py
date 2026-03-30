@@ -1,0 +1,380 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Damai Ticket Purchasing Automation Program
+"""
+
+import time
+import random
+import yaml
+import os
+from loguru import logger
+from fake_useragent import UserAgent
+from playwright.sync_api import sync_playwright
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+class DamaiTicketSystem:
+    """Main Damai Ticket Purchasing System"""
+    
+    def __init__(self, config_path="config.yaml"):
+        """Initialize the ticket system"""
+        self.config = self._load_config(config_path)
+        self._setup_logging()
+        self._setup_anti_detect()
+        self.browser = None
+        self.page = None
+        self.session = None
+        
+    def _load_config(self, config_path):
+        """Load configuration from YAML file"""
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            
+            # Load default configuration as fallback
+            with open("config.yaml", 'r', encoding='utf-8') as f:
+                default_config = yaml.safe_load(f)
+            
+            # Merge config with defaults, preserving user values
+            def merge_dicts(default, custom):
+                """Recursively merge custom dict into default dict"""
+                for key, value in default.items():
+                    if key not in custom:
+                        custom[key] = value
+                    elif isinstance(value, dict) and isinstance(custom[key], dict):
+                        merge_dicts(value, custom[key])
+                return custom
+            
+            merged_config = merge_dicts(default_config, config)
+            logger.info("Configuration loaded and merged with defaults successfully")
+            return merged_config
+        except Exception as e:
+            logger.error(f"Failed to load configuration: {e}")
+            raise
+    
+    def _setup_logging(self):
+        """Setup logging configuration"""
+        log_config = self.config['logging']
+        logger.remove()  # Remove default logger
+        
+        # Add file logger
+        logger.add(
+            log_config['log_file'],
+            level=log_config['level'],
+            rotation=f"{log_config['max_log_size']} MB",
+            retention=log_config['backup_count']
+        )
+        
+        # Add console logger
+        logger.add(
+            sink=lambda msg: print(msg, end=""),
+            level=log_config['level']
+        )
+        
+        logger.info("Logging setup completed")
+    
+    def _setup_anti_detect(self):
+        """Setup anti-detection mechanisms"""
+        self._rotate_user_agent = self.config['anti_detect']['rotate_user_agent']
+        self.ua = UserAgent() if self._rotate_user_agent else None
+        self._fixed_user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+        logger.info("Anti-detection setup completed")
+    
+    def _random_delay(self):
+        """Generate a random delay to avoid detection"""
+        delay_min = self.config['anti_detect']['random_delay_min']
+        delay_max = self.config['anti_detect']['random_delay_max']
+        delay = random.uniform(delay_min, delay_max)
+        time.sleep(delay)
+    
+    def _get_user_agent(self):
+        """Get a random user agent if rotation is enabled"""
+        # Check current rotation setting in config (not cached value)
+        if self.config['anti_detect']['rotate_user_agent'] and self.ua:
+            return self.ua.random
+        return self._fixed_user_agent
+    
+    def _retry_operation(self, func, *args, **kwargs):
+        """Retry operation with exponential backoff"""
+        max_attempts = self.config['advanced']['retry_attempts']
+        retry_delay = self.config['advanced']['retry_delay']
+        
+        for attempt in range(max_attempts):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1}/{max_attempts} failed: {e}")
+                if attempt < max_attempts - 1:
+                    time.sleep(retry_delay * (2 ** attempt))
+                    continue
+                logger.error(f"All {max_attempts} attempts failed")
+                raise
+    
+    def initialize_browser(self):
+        """Initialize Playwright browser"""
+        try:
+            playwright = sync_playwright().start()
+            
+            # Browser configuration for anti-detection
+            browser_config = {
+                "headless": False,  # Set to True for production
+                "args": [
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox"
+                ],
+                "ignore_default_args": ["--enable-automation"]
+            }
+            
+            self.browser = playwright.chromium.launch(**browser_config)
+            context = self.browser.new_context(
+                user_agent=self._get_user_agent(),
+                viewport={"width": 1920, "height": 1080}
+            )
+            
+            # Add stealth script to avoid detection
+            context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en']});
+                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3]});
+                Object.defineProperty(navigator, 'mimeTypes', {get: () => [1, 2, 3]});
+            """)
+            
+            self.page = context.new_page()
+            logger.info("Browser initialized successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize browser: {e}")
+            return False
+    
+    def login(self):
+        """Automated login to Damai platform"""
+        try:
+            logger.info("Starting login process")
+            self.page.goto("https://passport.damai.cn/login", timeout=60000)
+            self._random_delay()
+            
+            # Choose login method
+            login_config = self.config['login']
+            
+            if login_config['username'] and login_config['password']:
+                # Username/password login
+                logger.info("Using username/password login method")
+                # Click password login tab
+                self.page.click("//div[text()='密码登录']", timeout=10000)
+                self._random_delay()
+                
+                # Enter username and password
+                self.page.fill("#loginname", login_config['username'], timeout=10000)
+                self._random_delay()
+                self.page.fill("#password", login_config['password'], timeout=10000)
+                self._random_delay()
+                
+                # Click login button
+                self.page.click("#btn-submit", timeout=10000)
+            
+            elif login_config['phone_number']:
+                # Phone number login
+                logger.info("Using phone number login method")
+                # Enter phone number
+                self.page.fill("#phoneipt", login_config['phone_number'], timeout=10000)
+                self._random_delay()
+                
+                # Click get verification code button
+                self.page.click("#sendSmsCode", timeout=10000)
+                self._random_delay()
+                
+                # Wait for user to enter SMS code
+                logger.info("Please enter SMS verification code within 60 seconds...")
+                time.sleep(60)
+            
+            else:
+                logger.error("No login credentials provided")
+                return False
+            
+            # Check if login was successful by waiting for URL change
+            try:
+                self.page.wait_for_url("https://www.damai.cn/", timeout=60000)
+                self._random_delay()
+                logger.info("Login successful")
+                return True
+            except Exception as e:
+                logger.error(f"Login failed: {e}")
+                return False
+        except Exception as e:
+            logger.error(f"Login failed: {e}")
+            return False
+    
+    def monitor_ticket_availability(self):
+        """Monitor ticket availability in real-time"""
+        logger.info("Starting ticket availability monitoring")
+        event_id = self.config['event']['event_id']
+        refresh_interval = self.config['monitoring']['refresh_interval']
+        max_monitoring_time = self.config['monitoring']['max_monitoring_time']
+        
+        start_time = time.time()
+        
+        while time.time() - start_time < max_monitoring_time:
+            try:
+                logger.info(f"Checking ticket availability for event {event_id}")
+                
+                # Navigate to event page
+                self.page.goto(f"https://detail.damai.cn/item.htm?id={event_id}", timeout=30000)
+                self._random_delay()
+                
+                # Check if tickets are available
+                if self._is_ticket_available():
+                    logger.info("Tickets are now available! Starting purchase process")
+                    return True
+                
+                logger.info(f"Tickets not available yet. Checking again in {refresh_interval} seconds")
+                time.sleep(refresh_interval)
+                
+            except Exception as e:
+                logger.error(f"Monitoring error: {e}")
+                self._random_delay()
+        
+        logger.error("Monitoring timed out")
+        return False
+    
+    def _is_ticket_available(self):
+        """Check if tickets are available"""
+        try:
+            # Check for buy button or available ticket indicators
+            buy_button = self.page.query_selector("#buyNow" or "#J_buyBtn" or "//button[contains(text(), '立即购买')]")
+            if buy_button and buy_button.is_visible():
+                return True
+            
+            # Check if ticket options are available
+            ticket_options = self.page.query_selector_all("//div[@class='select_right_list']//li")
+            for option in ticket_options:
+                if "disabled" not in option.get_attribute("class", default=""):
+                    return True
+            
+            return False
+        except Exception as e:
+            logger.error(f"Error checking ticket availability: {e}")
+            return False
+    
+    def select_tickets(self):
+        """Select tickets based on user preferences"""
+        try:
+            logger.info("Starting ticket selection process")
+            
+            # Click buy button
+            buy_button = self.page.query_selector("#buyNow" or "#J_buyBtn" or "//button[contains(text(), '立即购买')]")
+            if buy_button and buy_button.is_visible():
+                buy_button.click(timeout=10000)
+                self._random_delay()
+            
+            # Wait for ticket selection page to load
+            self.page.wait_for_selector("//div[@class='sku-content']", timeout=30000)
+            self._random_delay()
+            
+            # Select ticket quantity
+            self._select_ticket_quantity()
+            
+            # Select ticket type based on preferences
+            self._select_ticket_type()
+            
+            logger.info("Ticket selection completed")
+            return True
+        except Exception as e:
+            logger.error(f"Ticket selection failed: {e}")
+            return False
+    
+    def _select_ticket_quantity(self):
+        """Select ticket quantity"""
+        quantity = self.config['event']['ticket_quantity']
+        logger.info(f"Selecting {quantity} tickets")
+        
+        # Implement ticket quantity selection logic here
+        # This will vary based on Damai's actual page structure
+        self._random_delay()
+    
+    def _select_ticket_type(self):
+        """Select ticket type based on user preferences"""
+        preferences = self.config['ticket_preferences']
+        logger.info(f"Selecting ticket type based on preferences: {preferences}")
+        
+        # Implement ticket type selection logic here
+        # This will vary based on Damai's actual page structure
+        self._random_delay()
+    
+    def checkout(self):
+        """Automated checkout process"""
+        try:
+            logger.info("Starting checkout process")
+            
+            # Click submit order button
+            submit_button = self.page.query_selector("//button[contains(text(), '提交订单')]" or "#submitOrder")
+            if submit_button and submit_button.is_visible():
+                submit_button.click(timeout=10000)
+                self._random_delay()
+            
+            # Wait for payment page
+            self.page.wait_for_selector("//div[@class='payment-wrapper']", timeout=30000)
+            self._random_delay()
+            
+            # Select payment method
+            payment_method = self.config['checkout']['payment_method']
+            logger.info(f"Selecting payment method: {payment_method}")
+            
+            # Implement payment method selection logic here
+            # This will vary based on Damai's actual page structure
+            
+            logger.info("Checkout process completed. Please complete payment manually if needed.")
+            return True
+        except Exception as e:
+            logger.error(f"Checkout failed: {e}")
+            return False
+    
+    def run(self):
+        """Main execution flow"""
+        try:
+            logger.info("Starting Damai Ticket Purchasing System")
+            
+            # Initialize browser
+            if not self.initialize_browser():
+                return False
+            
+            # Login to Damai
+            if not self.login():
+                return False
+            
+            # Monitor ticket availability
+            if not self.monitor_ticket_availability():
+                return False
+            
+            # Select tickets
+            if not self.select_tickets():
+                return False
+            
+            # Checkout process
+            if not self.checkout():
+                return False
+            
+            logger.info("Ticket purchasing process completed successfully")
+            return True
+            
+        except KeyboardInterrupt:
+            logger.info("Program interrupted by user")
+            return False
+        except Exception as e:
+            logger.error(f"Program encountered an error: {e}")
+            return False
+        finally:
+            # Cleanup resources
+            if self.browser:
+                self.browser.close()
+            logger.info("Program exited")
+
+if __name__ == "__main__":
+    # Create and run the ticket system
+    ticket_system = DamaiTicketSystem()
+    success = ticket_system.run()
+    exit(0 if success else 1)

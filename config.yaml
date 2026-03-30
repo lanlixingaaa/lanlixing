@@ -1,0 +1,55 @@
+# Damai Ticket Purchasing Configuration
+
+# User Authentication
+login:
+  username: ""
+  password: ""
+  phone_number: ""
+  sms_code_api: ""  # Optional: API for getting SMS code automatically
+
+# Target Event Configuration
+event:
+  event_id: ""
+  venue_id: ""
+  performance_id: ""
+  ticket_quantity: 1
+
+# Ticket Preferences
+ticket_preferences:
+  price_ranges: [""]  # List of preferred price ranges (e.g., ["180", "380"])
+  sections: [""]  # List of preferred sections
+  rows: [""]  # List of preferred rows
+  seat_type: ""  # Preferred seat type (e.g., "内场", "看台")
+
+# Monitoring Settings
+monitoring:
+  refresh_interval: 5  # Seconds between checks
+  max_monitoring_time: 3600  # Maximum monitoring time in seconds
+  check_in_advance: 300  # Start checking this many seconds before sale time
+
+# Anti-detection Settings
+anti_detect:
+  random_delay_min: 0.5
+  random_delay_max: 3.0
+  rotate_user_agent: true
+  use_proxy: false
+  proxy_list: []
+
+# Checkout Settings
+checkout:
+  auto_submit_order: true
+  payment_method: "alipay"  # "alipay" or "wechat"
+  timeout: 30  # Seconds to wait for checkout
+
+# Logging Settings
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_file: "damai_ticket.log"
+  max_log_size: 10  # MB
+  backup_count: 5
+
+# Advanced Settings
+advanced:
+  retry_attempts: 5
+  retry_delay: 2  # Seconds between retries
+  session_timeout: 1800  # Seconds before session expires
