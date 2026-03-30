@@ -1,0 +1,33 @@
+# Log files
+*.log
+*.log.*
+damai_ticket.*.log
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment variables
+.env
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
