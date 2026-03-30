@@ -1,181 +1,181 @@
-# Damai Ticket Purchasing Automation Program
+# 大麦网抢票自动化程序
 
-A robust and modular automation program for purchasing tickets on the Damai platform, featuring real-time monitoring, intelligent ticket selection, and anti-detection mechanisms.
+一款功能强大、模块化的大麦平台购票自动化程序，具备实时监控、智能选座和反检测机制等特性。
 
-## Features
+## 功能特性
 
-### Core Functionalities
-- **Automated Login**: Support for both username/password and phone number authentication methods
-- **Real-time Monitoring**: Continuously check ticket availability with configurable refresh intervals
-- **Intelligent Seat Selection**: Select tickets based on user-defined preferences (price range, section, row, seat type)
-- **Automated Checkout**: Streamlined order submission and payment method selection
+### 核心功能
+- **自动登录**：支持用户名/密码和手机号两种认证方式
+- **实时监控**：可配置刷新间隔的持续票源检查
+- **智能选座**：基于用户定义偏好的自动选座（价格范围、区域、排数、座位类型）
+- **自动结账**：简化的订单提交和支付方式选择
 
-### Anti-detection Mechanisms
-- Random delays between actions
-- User-agent rotation
-- Browser fingerprint obfuscation
-- Automation feature detection prevention
+### 反检测机制
+- 操作间随机延迟
+- 用户代理轮换
+- 浏览器指纹混淆
+- 自动化特征检测防护
 
-### Error Handling & Reliability
-- Comprehensive error handling for network failures and timeouts
-- Smart retry logic with exponential backoff
-- Detailed logging for troubleshooting
-- Configurable session management
+### 错误处理与可靠性
+- 网络故障和超时的全面错误处理
+- 带指数退避的智能重试逻辑
+- 详细的故障排除日志
+- 可配置的会话管理
 
-### Configuration Options
-- YAML-based configuration for easy customization
-- User-friendly parameter setup
-- Modular design for easy extension
+### 配置选项
+- 基于 YAML 的配置，便于自定义
+- 用户友好的参数设置
+- 模块化设计，易于扩展
 
-## Installation
+## 安装指南
 
-### Prerequisites
-- Python 3.8 or higher
-- pip package manager
+### 前置条件
+- Python 3.8 或更高版本
+- pip 包管理器
 
-### Setup Steps
+### 安装步骤
 
-1. **Clone or download the project**
+1. **克隆或下载项目**
    ```bash
    cd d:\T-code
    ```
 
-2. **Install required dependencies**
+2. **安装所需依赖**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Install Playwright browsers**
+3. **安装 Playwright 浏览器**
    ```bash
    playwright install chromium
    ```
 
-4. **Configure the program**
-   Edit the `config.yaml` file with your preferences:
+4. **配置程序**
+   使用您的偏好编辑 `config.yaml` 文件：
    ```bash
-   # Example: Edit configuration using notepad
+   # 示例：使用记事本编辑配置
    notepad config.yaml
    ```
 
-## Configuration
+## 配置说明
 
-### Authentication
+### 认证设置
 ```yaml
 login:
-  username: "your_username"      # Your Damai username (optional)
-  password: "your_password"      # Your Damai password (optional)
-  phone_number: "13800138000"    # Your phone number for SMS login (optional)
+  username: "your_username"      # 您的大麦用户名（可选）
+  password: "your_password"      # 您的大麦密码（可选）
+  phone_number: "13800138000"    # 用于短信登录的手机号（可选）
 ```
 
-### Event Settings
+### 活动设置
 ```yaml
 event:
-  event_id: "12345678"           # Event ID from Damai URL
-  ticket_quantity: 2             # Number of tickets to purchase
+  event_id: "12345678"           # 大麦 URL 中的活动 ID
+  ticket_quantity: 2             # 购买票数
 ```
 
-### Ticket Preferences
+### 票券偏好
 ```yaml
 ticket_preferences:
-  price_ranges: ["380", "580"]  # Preferred price ranges
-  sections: ["内场", "看台"]       # Preferred sections
-  rows: ["1-10"]                 # Preferred rows
-  seat_type: "内场"               # Preferred seat type
+  price_ranges: ["380", "580"]  # 首选价格范围
+  sections: ["内场", "看台"]       # 首选区域
+  rows: ["1-10"]                 # 首选排数
+  seat_type: "内场"               # 首选座位类型
 ```
 
-### Monitoring Settings
+### 监控设置
 ```yaml
 monitoring:
-  refresh_interval: 5            # Seconds between availability checks
-  max_monitoring_time: 3600      # Maximum monitoring time in seconds
+  refresh_interval: 5            # 检查可用性的间隔时间（秒）
+  max_monitoring_time: 3600      # 最大监控时间（秒）
 ```
 
-## Usage
+## 使用方法
 
-### Basic Usage
+### 基本使用
 ```bash
 python damai_ticket.py
 ```
 
-### Running with Custom Configuration
+### 使用自定义配置
 ```bash
 python damai_ticket.py --config custom_config.yaml
 ```
 
-## Workflow
+## 工作流程
 
-1. **Initialization**: The program loads configuration and sets up logging
-2. **Browser Setup**: Launches a Chrome browser with anti-detection settings
-3. **Login**: Automatically logs in to Damai using configured credentials
-4. **Monitoring**: Continuously checks ticket availability for the target event
-5. **Ticket Selection**: Automatically selects tickets based on user preferences
-6. **Checkout**: Proceeds to checkout and selects payment method
-7. **Completion**: Notifies user and logs the results
+1. **初始化**：程序加载配置并设置日志
+2. **浏览器设置**：启动带有反检测设置的 Chrome 浏览器
+3. **登录**：使用配置的凭据自动登录大麦网
+4. **监控**：持续检查目标活动的票源可用性
+5. **选座**：根据用户偏好自动选择票券
+6. **结账**：进入结账流程并选择支付方式
+7. **完成**：通知用户并记录结果
 
-## Logging
+## 日志记录
 
-The program generates detailed logs in the specified log file (`damai_ticket.log` by default). Logs include:
-- Program startup and shutdown information
-- Login attempts and results
-- Ticket availability checks
-- Selection and checkout process
-- Errors and exceptions
+程序在指定日志文件（默认 `damai_ticket.log`）中生成详细日志。日志包含：
+- 程序启动和关闭信息
+- 登录尝试和结果
+- 票源可用性检查
+- 选座和结账过程
+- 错误和异常信息
 
-## Important Notes
+## 重要注意事项
 
-### Legal and Ethical Considerations
-- **Compliance**: This program is intended for personal use only. Ensure you comply with Damai's terms of service
-- **Fair Usage**: Avoid using the program to purchase excessive tickets or engage in scalping activities
-- **Responsibility**: The user is solely responsible for any consequences arising from the use of this program
+### 法律与道德考量
+- **合规性**：本程序仅用于个人使用。请确保您遵守大麦网的服务条款
+- **公平使用**：避免使用程序购买过多门票或从事黄牛活动
+- **责任**：用户对使用本程序产生的任何后果负全部责任
 
-### Anti-detection Best Practices
-- Avoid running multiple instances simultaneously
-- Use reasonable refresh intervals (minimum 5 seconds recommended)
-- Consider using proxies for extended usage
-- Monitor the program's behavior to avoid detection
+### 反检测最佳实践
+- 避免同时运行多个实例
+- 使用合理的刷新间隔（建议至少 5 秒）
+- 长期使用时考虑使用代理
+- 监控程序行为，避免被检测
 
-### Troubleshooting
-- **Login Issues**: If automated login fails, try manual login and then run the program
-- **Detection Problems**: Reduce the refresh frequency and increase random delays
-- **Network Errors**: Check your internet connection and adjust retry settings
-- **Element Not Found**: The program may need updates if Damai changes its page structure
+### 故障排除
+- **登录问题**：如果自动登录失败，尝试手动登录后再运行程序
+- **检测问题**：减少刷新频率并增加随机延迟
+- **网络错误**：检查您的网络连接并调整重试设置
+- **元素未找到**：如果大麦网更改页面结构，程序可能需要更新
 
-## Technical Details
+## 技术细节
 
-### Architecture
-- **Modular Design**: Separate components for configuration, logging, browser automation, and ticket purchasing
-- **Playwright Integration**: Uses Playwright for robust browser automation
-- **YAML Configuration**: Easy-to-edit configuration file format
-- **Comprehensive Logging**: Detailed logging for debugging and monitoring
+### 架构
+- **模块化设计**：配置、日志、浏览器自动化和购票功能分离
+- **Playwright 集成**：使用 Playwright 实现强大的浏览器自动化
+- **YAML 配置**：易于编辑的配置文件格式
+- **全面日志记录**：用于调试和监控的详细日志
 
-### Dependencies
-- `playwright`: Browser automation framework
-- `requests`: HTTP library for API requests
-- `pyyaml`: YAML configuration parsing
-- `loguru`: Modern logging library
-- `fake-useragent`: User-agent generation for rotation
-- `python-dotenv`: Environment variable loading
+### 依赖项
+- `playwright`：浏览器自动化框架
+- `requests`：用于 API 请求的 HTTP 库
+- `pyyaml`：YAML 配置解析
+- `loguru`：现代日志库
+- `fake-useragent`：用于生成轮换的用户代理
+- `python-dotenv`：环境变量加载
 
-## Development
+## 开发说明
 
-### Extending the Program
-- Add new authentication methods in the `login` method
-- Implement advanced seat selection algorithms in `_select_ticket_type`
-- Add support for additional payment methods
-- Enhance anti-detection mechanisms
+### 扩展程序
+- 在 `login` 方法中添加新的认证方式
+- 在 `_select_ticket_type` 中实现高级选座算法
+- 添加对其他支付方式的支持
+- 增强反检测机制
 
-### Testing
-- Test the program with various event scenarios
-- Validate anti-detection features in different environments
-- Test error handling with simulated network issues
-- Verify compatibility with different Damai page structures
+### 测试
+- 使用各种活动场景测试程序
+- 在不同环境中验证反检测功能
+- 测试模拟网络问题下的错误处理
+- 验证与不同大麦网页面结构的兼容性
 
-## Disclaimer
+## 免责声明
 
-This program is provided for educational and research purposes only. The author does not encourage or condone any illegal or unethical use of this software. Users are responsible for ensuring their use of this program complies with all applicable laws and website terms of service.
+本程序仅用于教育和研究目的。作者不鼓励或纵容任何非法或不道德使用本软件。用户有责任确保其使用本程序符合所有适用法律和网站服务条款。
 
-The author makes no guarantees about the program's performance, reliability, or ability to successfully purchase tickets. Use at your own risk.
+作者不对程序的性能、可靠性或成功购票能力做出任何保证。使用风险自负。
 
-## License
+## 许可证
 
-This project is open source and available under the MIT License.
+本项目是开源的，采用 MIT 许可证。
