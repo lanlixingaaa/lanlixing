@@ -98,7 +98,7 @@ class TestAntiDetect:
             nonlocal attempt_count
             attempt_count += 1
             if attempt_count <= max_failures:
-                raise Exception(f"Attempt {attempt_count} failed")
+                raise ConnectionError(f"Attempt {attempt_count} failed")
             return "eventual success"
         
         result = system._retry_operation(eventual_success_func)

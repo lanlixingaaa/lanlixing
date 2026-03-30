@@ -51,5 +51,7 @@ logging:
 # Advanced Settings
 advanced:
   retry_attempts: 5
-  retry_delay: 2  # Seconds between retries
+  retry_delay: 2  # Initial delay in seconds
+  backoff_factor: 2.0  # Exponential backoff factor
+  retry_error_types: ["ConnectionError", "TimeoutError", "URLError", "HTTPError"]  # Network error types to retry
   session_timeout: 1800  # Seconds before session expires

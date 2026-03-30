@@ -8,10 +8,15 @@ import time
 import random
 import yaml
 import os
+import threading
+import queue
 from loguru import logger
 from fake_useragent import UserAgent
 from playwright.sync_api import sync_playwright
 from dotenv import load_dotenv
+from urllib.error import URLError, HTTPError
+from http.client import HTTPException
+from requests.exceptions import ConnectionError, Timeout, HTTPError as RequestsHTTPError
 
 # Load environment variables
 load_dotenv()
@@ -24,6 +29,7 @@ class DamaiTicketSystem:
         self.config = self._load_config(config_path)
         self._setup_logging()
         self._setup_anti_detect()
+        self.retry_manager = self.RetryManager(self)  # Initialize retry manager
         self.browser = None
         self.page = None
         self.session = None
@@ -97,21 +103,159 @@ class DamaiTicketSystem:
             return self.ua.random
         return self._fixed_user_agent
     
-    def _retry_operation(self, func, *args, **kwargs):
-        """Retry operation with exponential backoff"""
-        max_attempts = self.config['advanced']['retry_attempts']
-        retry_delay = self.config['advanced']['retry_delay']
+    class RetryManager:
+        """Robust network connection retry manager with thread safety and non-blocking support"""
         
-        for attempt in range(max_attempts):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                logger.warning(f"Attempt {attempt + 1}/{max_attempts} failed: {e}")
-                if attempt < max_attempts - 1:
-                    time.sleep(retry_delay * (2 ** attempt))
-                    continue
-                logger.error(f"All {max_attempts} attempts failed")
-                raise
+        def __init__(self, parent):
+            """Initialize retry manager"""
+            self.parent = parent
+            self.config = parent.config['advanced']
+            self._lock = threading.RLock()  # Reentrant lock for thread safety
+            self._retry_queues = {}  # Queue for non-blocking operations
+            self._active_threads = set()
+            
+            # Error types to retry
+            self.retry_error_types = self.config['retry_error_types']
+            
+            # Map error type strings to actual exception classes
+            # Include both built-in ConnectionError and requests.exceptions.ConnectionError
+            import builtins
+            self.error_class_map = {
+                "ConnectionError": (builtins.ConnectionError, ConnectionError),
+                "TimeoutError": TimeoutError,
+                "URLError": URLError,
+                "HTTPError": (HTTPError, RequestsHTTPError),
+                "Timeout": Timeout,
+                "HTTPException": HTTPException
+            }
+        
+        def is_retryable_error(self, exception):
+            """Check if an exception is retryable based on configuration"""
+            for error_type in self.retry_error_types:
+                error_class = self.error_class_map.get(error_type)
+                if error_class:
+                    if isinstance(error_class, tuple):
+                        if isinstance(exception, error_class):
+                            return True
+                    elif isinstance(exception, error_class):
+                        return True
+            return False
+        
+        def retry(self, func, *args, success_callback=None, failure_callback=None, **kwargs):
+            """Retry operation with exponential backoff - blocking mode"""
+            with self._lock:
+                max_attempts = self.config['retry_attempts']
+                initial_delay = self.config['retry_delay']
+                backoff_factor = self.config['backoff_factor']
+                
+                for attempt in range(max_attempts):
+                    try:
+                        start_time = time.time()
+                        result = func(*args, **kwargs)
+                        elapsed_time = time.time() - start_time
+                        
+                        logger.info(f"Operation succeeded on attempt {attempt + 1}/{max_attempts} in {elapsed_time:.3f}s")
+                        
+                        if success_callback:
+                            success_callback(result)
+                        
+                        return result
+                        
+                    except Exception as e:
+                        elapsed_time = time.time() - start_time
+                        
+                        if self.is_retryable_error(e):
+                            logger.warning(f"Attempt {attempt + 1}/{max_attempts} failed in {elapsed_time:.3f}s: {type(e).__name__}: {e}")
+                            
+                            if attempt < max_attempts - 1:
+                                # Calculate exponential backoff with jitter
+                                delay = initial_delay * (backoff_factor ** attempt)
+                                # Add jitter to prevent thundering herd problem
+                                jitter = random.uniform(0, delay * 0.2)
+                                total_delay = delay + jitter
+                                
+                                logger.info(f"Retrying in {total_delay:.1f}s...")
+                                time.sleep(total_delay)
+                                continue
+                        else:
+                            logger.error(f"Non-retryable error on attempt {attempt + 1}/{max_attempts} in {elapsed_time:.3f}s: {type(e).__name__}: {e}")
+                        
+                        logger.error(f"All {max_attempts} attempts failed")
+                        
+                        if failure_callback:
+                            failure_callback(e)
+                        
+                        raise
+        
+        def retry_non_blocking(self, func, *args, success_callback=None, failure_callback=None, **kwargs):
+            """Retry operation in non-blocking mode using threads"""
+            def worker():
+                """Thread worker function"""
+                thread_id = threading.current_thread().ident
+                try:
+                    result = self.retry(func, *args, success_callback=success_callback, failure_callback=failure_callback, **kwargs)
+                finally:
+                    with self._lock:
+                        self._active_threads.discard(thread_id)
+            
+            # Create and start new thread
+            thread = threading.Thread(target=worker, daemon=True)
+            with self._lock:
+                thread.start()
+                self._active_threads.add(thread.ident)
+            
+            return thread
+        
+        def retry_async(self, func, *args, success_callback=None, failure_callback=None, **kwargs):
+            """Retry operation asynchronously with callback support"""
+            result_queue = queue.Queue(maxsize=1)
+            
+            def internal_callback(result=None, error=None):
+                if error:
+                    result_queue.put((None, error))
+                    if failure_callback:
+                        failure_callback(error)
+                else:
+                    result_queue.put((result, None))
+                    if success_callback:
+                        success_callback(result)
+            
+            def worker():
+                try:
+                    result = self.retry(func, *args, **kwargs)
+                    internal_callback(result=result)
+                except Exception as e:
+                    internal_callback(error=e)
+            
+            thread = threading.Thread(target=worker, daemon=True)
+            thread.start()
+            
+            return result_queue
+        
+        def get_active_thread_count(self):
+            """Get number of active retry threads"""
+            with self._lock:
+                return len(self._active_threads)
+        
+        def wait_for_all(self, timeout=None):
+            """Wait for all active retry threads to complete"""
+            start_time = time.time()
+            
+            while True:
+                with self._lock:
+                    if not self._active_threads:
+                        return True
+                
+                if timeout:
+                    elapsed = time.time() - start_time
+                    if elapsed >= timeout:
+                        return False
+                
+                time.sleep(0.1)  # Check every 100ms
+    
+    def _retry_operation(self, func, *args, **kwargs):
+        """Retry operation with exponential backoff (backward compatibility)"""
+        return self.retry_manager.retry(func, *args, **kwargs)
     
     def initialize_browser(self):
         """Initialize Playwright browser"""
@@ -153,7 +297,8 @@ class DamaiTicketSystem:
     
     def login(self):
         """Automated login to Damai platform"""
-        try:
+        def login_operation():
+            """Login operation wrapped for retry"""
             logger.info("Starting login process")
             self.page.goto("https://passport.damai.cn/login", timeout=60000)
             self._random_delay()
@@ -194,19 +339,28 @@ class DamaiTicketSystem:
             
             else:
                 logger.error("No login credentials provided")
-                return False
+                raise ValueError("No login credentials provided")
             
             # Check if login was successful by waiting for URL change
-            try:
-                self.page.wait_for_url("https://www.damai.cn/", timeout=60000)
-                self._random_delay()
-                logger.info("Login successful")
-                return True
-            except Exception as e:
-                logger.error(f"Login failed: {e}")
-                return False
+            self.page.wait_for_url("https://www.damai.cn/", timeout=60000)
+            self._random_delay()
+            logger.info("Login successful")
+            return True
+        
+        def success_callback(result):
+            logger.info("Login success callback: Login completed successfully")
+        
+        def failure_callback(error):
+            logger.error(f"Login failure callback: {error}")
+        
+        try:
+            return self.retry_manager.retry(
+                login_operation,
+                success_callback=success_callback,
+                failure_callback=failure_callback
+            )
         except Exception as e:
-            logger.error(f"Login failed: {e}")
+            logger.error(f"Login failed after all retry attempts: {e}")
             return False
     
     def monitor_ticket_availability(self):
@@ -218,24 +372,40 @@ class DamaiTicketSystem:
         
         start_time = time.time()
         
+        def check_availability():
+            """Check ticket availability wrapped for retry"""
+            logger.info(f"Checking ticket availability for event {event_id}")
+            
+            # Navigate to event page
+            self.page.goto(f"https://detail.damai.cn/item.htm?id={event_id}", timeout=30000)
+            self._random_delay()
+            
+            # Check if tickets are available
+            return self._is_ticket_available()
+        
+        def success_callback(result):
+            if result:
+                logger.info("Tickets are now available! Starting purchase process")
+        
+        def failure_callback(error):
+            logger.error(f"Availability check failed: {error}")
+        
         while time.time() - start_time < max_monitoring_time:
             try:
-                logger.info(f"Checking ticket availability for event {event_id}")
+                is_available = self.retry_manager.retry(
+                    check_availability,
+                    success_callback=success_callback,
+                    failure_callback=failure_callback
+                )
                 
-                # Navigate to event page
-                self.page.goto(f"https://detail.damai.cn/item.htm?id={event_id}", timeout=30000)
-                self._random_delay()
-                
-                # Check if tickets are available
-                if self._is_ticket_available():
-                    logger.info("Tickets are now available! Starting purchase process")
+                if is_available:
                     return True
                 
                 logger.info(f"Tickets not available yet. Checking again in {refresh_interval} seconds")
                 time.sleep(refresh_interval)
                 
             except Exception as e:
-                logger.error(f"Monitoring error: {e}")
+                logger.error(f"Monitoring loop error: {e}")
                 self._random_delay()
         
         logger.error("Monitoring timed out")
