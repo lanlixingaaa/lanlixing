@@ -46,9 +46,11 @@
    ```
 
 3. **安装 Playwright 浏览器**
+   执行以下命令安装所需的Chromium浏览器：
    ```bash
    playwright install chromium
    ```
+   更多浏览器支持和安装选项，请参考 [Playwright官方文档](https://playwright.dev/docs/intro#installation)。
 
 4. **配置程序**
    使用您的偏好编辑 `config.yaml` 文件：
